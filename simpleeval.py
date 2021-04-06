@@ -261,6 +261,7 @@ DEFAULT_NAMES = {"True": True, "False": False, "None": None}
 
 ATTR_INDEX_FALLBACK = True
 
+PARSED_EXPRESSION_CACHE = {}
 
 ########################################
 # And the actual evaluator:
@@ -274,7 +275,8 @@ class SimpleEval(object):  # pylint: disable=too-few-public-methods
         """
     expr = ""
 
-    def __init__(self, operators=None, functions=None, names=None):
+    def __init__(self, operators=None, functions=None, names=None,
+                 enable_cache=False):
         """
             Create the evaluator instance.  Set up valid operators (+,-, etc)
             functions (add, random, get_val, whatever) and names. """
@@ -289,6 +291,8 @@ class SimpleEval(object):  # pylint: disable=too-few-public-methods
         self.operators = operators
         self.functions = functions
         self.names = names
+
+        self.enable_cache = enable_cache
 
         self.nodes = {
             ast.Expr: self._eval_expr,
@@ -344,7 +348,16 @@ class SimpleEval(object):  # pylint: disable=too-few-public-methods
         self.expr = expr
 
         # and evaluate:
-        return self._eval(ast.parse(expr.strip()).body[0])
+        if not self.enable_cache:
+            return self._eval(ast.parse(expr.strip()).body[0])
+
+        stripped_expr = expr.strip()
+        parsed_expr = PARSED_EXPRESSION_CACHE.get(stripped_expr)
+        if parsed_expr:
+            return self._eval(parsed_expr)
+        parsed_expr = ast.parse(stripped_expr).body[0]
+        PARSED_EXPRESSION_CACHE[stripped_expr] = parsed_expr
+        return self._eval(parsed_expr)
 
     def _eval(self, node):
         """ The internal evaluator used on each node in the parsed tree. """
@@ -631,9 +644,11 @@ class EvalWithCompoundTypes(SimpleEval):
         return to_return
 
 
-def simple_eval(expr, operators=None, functions=None, names=None):
+def simple_eval(expr, operators=None, functions=None, names=None,
+                enable_cache=False):
     """ Simply evaluate an expresssion """
     s = SimpleEval(operators=operators,
                    functions=functions,
-                   names=names)
+                   names=names,
+                   enable_cache=enable_cache)
     return s.eval(expr)
